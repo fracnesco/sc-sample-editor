@@ -1,0 +1,292 @@
+TITLE:: SampleEdit
+summary:: one sound file, read into the language and opened for editing
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEditor, Classes/SampleAnalysis, Classes/SampleEditorHost
+
+DESCRIPTION::
+The model behind link::Classes/SampleEditor::, usable on its own: the file
+is read into one link::Classes/Signal:: per channel, and every edit is a
+setting on top of it - the trim, a gain, the DC taken out, fades on the edges
+- until link::#-save:: writes the result over the file or link::#-saveAs::
+writes it somewhere else. Nothing here needs the server. Every file written is
+told to the edit's host (link::Classes/SampleEditorHost::), which may read it
+back into a sample library.
+
+code::
+e = SampleEdit("~/x.wav");              // with SampleEditor.defaultHost
+e = SampleEdit(path, SampleEditorDirtHost(~dirt));   // e.label is "bd:3" when ~dirt holds it
+e.setRegion(0.1, 0.9); e.gainDb = -3; e.removeDC = true;
+e.metrics;                              // (peak:, rms:, crest:, lufs: ...) of the result
+e.metrics(false);                       // of the file as it is
+e.save;                                 // over the file, .bak kept
+e.revert;                               // the .bak back
+e.addToBank("~/samples/kicks");         // the trim as kicks/kicks_00.wav, handed to the host
+::
+
+It also holds the beat grid - a bpm, where a beat falls, beats to the bar -
+and, once link::#-analyseFeatures:: has run, what link::Classes/SampleFeatures::
+says about the whole file: the onsets the slicer cuts on, the tempo, the key.
+
+code::
+e.analyseFeatures;                      // a few hundred ms on a 30 s loop
+e.bpm; e.beatOffset;                    // the analysis's, until set
+e.gridLines(1/16, 0, 2);                // [[seconds, beat] ...]
+e.transients(0.7);                      // attack times at a sensitivity
+e.refineOnset(e.firstTransient);        // the frame, to the sample
+::
+
+It sends code::changed:: with code::\loaded::, code::\params::, code::\saved::,
+code::\savedAs::, code::\reverted::, code::\grid:: and code::\features::; the
+editor window depends on it.
+
+
+CLASSMETHODS::
+
+METHOD:: new
+The file, read; named as the host's library knows it (link::#-name::,
+link::#-index::) when it does.
+ARGUMENT:: path
+the file.
+ARGUMENT:: host
+nil for link::Classes/SampleEditor#*defaultHost::.
+
+METHOD:: nextBankFile
+The path link::#-addToBank:: would write: code::<folder>_<nn>.<ext>::, nn the
+number of sound files in the folder or the first free number after it.
+ARGUMENT:: folder
+the bank's folder.
+ARGUMENT:: ext
+the extension.
+
+METHOD:: soundFilesIn
+The sound files right inside a folder (not its subfolders), sorted.
+ARGUMENT:: folder
+the folder.
+
+METHOD:: samePath
+Whether two spellings are one path: separators, a trailing slash, case on Windows.
+ARGUMENT:: a
+a path.
+ARGUMENT:: b
+another.
+
+METHOD:: bankName
+The bank SuperDirt makes of a folder: its name, with what Tidal's mini notation
+would read as something else (spaces above all) as code::_::.
+ARGUMENT:: folderPath
+the folder.
+RETURNS:: a link::Classes/Symbol::.
+
+METHOD:: folderEntries
+What is in a folder, sorted (glob characters in the name escaped).
+ARGUMENT:: folder
+the folder.
+
+METHOD:: maxSamples
+Frames times channels the editor will read; 24 million by default (about 4.5
+minutes of stereo at 44.1 kHz). Reading takes about 0.2 s per million samples,
+and sclang does nothing else meanwhile, so SuperDirt plays nothing while a long
+file opens. Above link::#*hardLimit:: the hard limit holds.
+
+METHOD:: hardLimit
+536 million: the most the editor ever reads, whatever link::#*maxSamples:: is.
+The whole file goes into one Signal, and sclang crashes, with no error to catch,
+on any object of 2 GiB or more (536,870,912 floats) - about 101 minutes of
+stereo at 44.1 kHz.
+
+METHOD:: ceilingDb
+What normalize brings the peak to; -1 dBFS by default.
+
+METHOD:: backupSuffix
+code::".bak"::, beside the file. Not a sound file extension, so the library
+skips it.
+
+
+INSTANCEMETHODS::
+
+METHOD:: start
+METHOD:: end
+METHOD:: setRegion
+The trim, as fractions of the file. The fades are clamped to fit inside it.
+
+METHOD:: gainDb
+METHOD:: removeDC
+METHOD:: fadeIn
+METHOD:: fadeOut
+The gain in dB, whether the mean of each channel is taken out, and the sine
+fades in seconds on the edges of the trim.
+
+METHOD:: normalize
+Set the gain so the loudest sample of the trim sits at the ceiling.
+
+METHOD:: reset
+The whole file again, no gain, no fades, the DC left in.
+
+METHOD:: isPristine
+Whether there is anything to save.
+
+METHOD:: metrics
+The readings of the result, or with code::false:: of the file as it is: the
+keys of link::Classes/SampleAnalysis#*metrics:: plus code::lufs::,
+code::momentary::, code::wholeBlock::, code::frames:: and code::duration::.
+
+METHOD:: dcOffsets
+The mean of each channel over the whole file.
+
+METHOD:: peaks
+METHOD:: samples
+What the waveform view draws: min and max per column over a window of the
+file, or the samples themselves for a window narrow enough.
+
+METHOD:: render
+The result as one interleaved Signal, clipped to a full-scale value when one
+is given.
+
+METHOD:: write
+Write the result to a path in the file's own format, or a given one.
+
+METHOD:: save
+Over the file, keeping a code::.bak:: beside it the first time; then the
+library's Buffer is re-read and this edit starts again from the saved file.
+RETURNS:: the path, or nil when it could not.
+
+METHOD:: renderRange
+Any stretch of the file with the gain and the DC as set and fades of its own -
+what a slice is written from.
+ARGUMENT:: f0
+the first frame.
+ARGUMENT:: f1
+the frame after the last.
+ARGUMENT:: fadeInSecs
+a sine fade in, seconds.
+ARGUMENT:: fadeOutSecs
+a sine fade out, seconds.
+ARGUMENT:: clipTo
+nil, or the amplitude to clip at.
+RETURNS:: a link::Classes/Signal::, interleaved.
+
+METHOD:: writeRange
+The same to a file, in the file's own format unless told otherwise.
+ARGUMENT:: outPath
+ARGUMENT:: f0
+ARGUMENT:: f1
+ARGUMENT:: fadeInSecs
+ARGUMENT:: fadeOutSecs
+ARGUMENT:: header
+ARGUMENT:: format
+As for link::#-renderRange:: and link::#-write::.
+RETURNS:: the path, or nil.
+
+METHOD:: analyseFeatures
+link::Classes/SampleFeatures#*analyseChannels:: on the whole file. Inside a
+Routine with code::SampleFeatures.breathing:: set it lets the rest of sclang
+in. The grid takes the analysis's bpm when it has none. A save or a revert
+reads the file again and drops the features.
+RETURNS:: the features, an Event.
+
+METHOD:: features
+What link::#-analyseFeatures:: found, or nil.
+
+METHOD:: bpm
+The grid's bpm, 20 .. 999; nil, no grid.
+
+METHOD:: beatOffset
+Where a beat of the grid falls, seconds; the grid runs both ways from it.
+
+METHOD:: beatsPerBar
+Four by default: a bar line every so many beats.
+
+METHOD:: beatSeconds
+60 / bpm, or nil.
+
+METHOD:: gridLines
+The grid's lines between two times.
+ARGUMENT:: division
+of a whole note: 1/4 a beat, 1/16 a sixteenth.
+ARGUMENT:: from
+seconds.
+ARGUMENT:: to
+seconds; nil for the end.
+RETURNS:: code::[[seconds, beat] ...]::, the beat fractional between beats.
+
+METHOD:: transients
+ARGUMENT:: sensitivity
+0 .. 1, see link::Classes/SampleFeatures#*pickOnsets::.
+RETURNS:: the attack times, seconds; empty before link::#-analyseFeatures::.
+
+METHOD:: firstTransient
+Where the first hit is, seconds: the first attack at a high sensitivity, or
+where the sound starts if that is earlier.
+
+METHOD:: refineOnset
+An attack time made exact: the first sample within 15 ms either side that
+reaches 30% of the loudest there, a millisecond earlier, back to where channel
+0 crosses zero.
+ARGUMENT:: seconds
+a time from the analysis.
+RETURNS:: a frame.
+
+METHOD:: saveAs
+To another path; into the bank's folder and the host appends it to the bank
+(link::Classes/SampleEditorHost#-fileAdded::).
+RETURNS:: the path, or nil.
+
+METHOD:: addToBank
+The trim as a new file in a bank's folder, then handed to the host
+(link::Classes/SampleEditorHost#-folderWritten::), which loads it when it knows
+a library. A folder that exists gets one more
+file, a new one is made. The file is named after the folder with the next free
+number (link::#*nextBankFile::), in link::#-bankFormat::, with the gain, the DC
+and the fades as set, and 1 ms in / 4 ms out where it cuts into the file. With
+a bpm the file is given it in the host's tag store, when there is one, and queued for analysis.
+ARGUMENT:: folder
+the bank's folder.
+RETURNS:: code::(path:, bank:, index:)::, or nil.
+
+METHOD:: bankFormat
+code::[extension, header, sample format]:: of a file written for a bank: the
+file's own, or WAV when the host's library would not read the file's kind
+(link::Classes/SampleEditorHost#-soundExtensions::; SuperDirt reads no flac, ogg,
+mp3). The slicer's export uses it too.
+
+METHOD:: revert
+The code::.bak:: back over the file.
+
+METHOD:: hasBackup
+METHOD:: backupPath
+Whether and where the original is kept.
+
+METHOD:: host
+METHOD:: name
+METHOD:: index
+METHOD:: path
+METHOD:: label
+METHOD:: inLibrary
+Where it came from.
+
+METHOD:: sampleRate
+METHOD:: numChannels
+METHOD:: numFrames
+METHOD:: energyBlocks
+The mean square of the file in every 2 ms block (link::#-blockFrames::), the
+channels summed, as read: no gain, the DC left in. Worked out the first time
+it is asked for and kept until the file is read again.
+RETURNS:: a link::Classes/FloatArray::.
+
+METHOD:: blockFrames
+Frames in one energy block.
+
+METHOD:: levelOf
+The level of a stretch of the file: its loudest 10 ms, from the blocks wholly
+inside it; a stretch under 10 ms is read whole. The slicer's keep judges slices by it.
+ARGUMENT:: f0
+the first frame.
+ARGUMENT:: f1
+the frame after the last.
+RETURNS:: dB (an rms level), or code::-inf:: for silence.
+
+METHOD:: duration
+METHOD:: headerFormat
+METHOD:: sampleFormat
+METHOD:: channels
+The file as read.

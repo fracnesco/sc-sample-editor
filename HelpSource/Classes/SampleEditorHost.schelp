@@ -1,0 +1,112 @@
+TITLE:: SampleEditorHost
+summary:: what a SampleEditor knows of the world: where the preview plays, and who hears of the files it writes
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEditor, Classes/SampleEditorDirtHost, Classes/SampleEdit
+
+DESCRIPTION::
+The editor, its model and its slicer ask their host where the preview plays,
+which Buffer to play from and what a sample library calls a file, and they tell
+it about every file they write. This class is the editor on its own: the
+preview goes to the server's hardware outputs (the menu beside play lists them
+in pairs), a file is read into a Buffer of the editor's own and freed with the
+window, and written files are only written. There is no tag store, so a bpm,
+key or tags set in the window last as long as the window.
+
+code::
+SampleEditor("~/x.wav", SampleEditorHost(s));
+SampleEditor.defaultHost = SampleEditorHost(s);     // for every editor from now on
+::
+
+link::Classes/SampleEditorDirtHost:: is the host inside a SuperDirt. Anything
+else can be a host by answering the messages below: they are the whole of what
+the editor asks.
+
+CLASSMETHODS::
+
+METHOD:: new
+ARGUMENT:: server
+nil for code::Server.default::.
+
+INSTANCEMETHODS::
+
+METHOD:: server
+The Server the preview plays on.
+
+METHOD:: numChannels
+How many channels the preview writes: 2.
+
+METHOD:: outputNames
+The menu beside play, one String per output: code::"out 0-1"::, code::"out 2-3":: ...
+
+METHOD:: outputLabel
+METHOD:: outputHint
+The menu's label and hint.
+
+METHOD:: playTarget
+Where the preview synth goes for an output.
+ARGUMENT:: i
+the output's index.
+RETURNS:: code::(target:, bus:, addAction:)::.
+
+METHOD:: wake
+Called just before the preview starts on an output, at the server's latency.
+ARGUMENT:: i
+the output's index.
+
+METHOD:: bufferFor
+A Buffer already holding the file, or nil for the editor to read one. Called
+inside a Routine: it may sync.
+ARGUMENT:: path
+the file.
+
+METHOD:: sampleAt
+The file as a library knows it.
+ARGUMENT:: path
+the file.
+RETURNS:: code::[name, index]::, or nil.
+
+METHOD:: pathOf
+The file a library holds as name:index, or nil.
+ARGUMENT:: name
+the bank.
+ARGUMENT:: index
+the sample in it.
+
+METHOD:: bankSize
+How many samples a bank holds now (the to bank... window's preview).
+ARGUMENT:: name
+the bank.
+
+METHOD:: fileChanged
+A file was written over: a save or a revert.
+ARGUMENT:: path
+the file.
+
+METHOD:: fileAdded
+A file was written into the folder of a bank (save as).
+ARGUMENT:: path
+the new file.
+ARGUMENT:: bank
+the bank's name.
+
+METHOD:: folderWritten
+New files in a bank's folder: to bank... and export slices....
+ARGUMENT:: folder
+the folder.
+ARGUMENT:: paths
+the files written.
+RETURNS:: the names of the banks loaded, or nil.
+
+METHOD:: store
+Where a file's bpm, key and tags are kept, or nil. A store answers
+SuperDirtGUI's code::SDGSampleTags:: messages: code::infoOf::,
+code::setBpm::, code::setKey::, code::setTags::, code::addTag::,
+code::analyse::, code::enqueue::, and sends code::\tags:: when they change.
+
+METHOD:: soundExtensions
+The kinds of file the library reads: wav and aiff, as SuperDirt. A file of
+another kind is written as WAV for a bank.
+
+METHOD:: samplesFolder
+Where banks go by default: Dirt-Samples when SuperDirt is installed
+(link::Classes/SampleCutter#*samplesFolder::), else nil.

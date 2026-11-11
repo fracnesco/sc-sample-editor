@@ -1,0 +1,53 @@
+TITLE:: SampleEditorDirtHost
+summary:: the sample editor inside a SuperDirt: previews through orbits, reads saves back into the library's Buffers, loads banks
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEditorHost, Classes/SampleEditor, Classes/SuperDirt
+
+DESCRIPTION::
+A link::Classes/SampleEditorHost:: that knows a SuperDirt. The menu beside play
+lists its orbits, numbered from 0 as code::# orbit:: is, and the preview plays
+at the head of the orbit's group into its dry bus, so that orbit's effects
+apply; its always-on effects are woken first, since they pause after four
+seconds of silence and only a set resumes them. A file the library holds opens
+as code::bd:3:: and plays from the library's own Buffer, read first if the
+library was made with code::doNotReadYet::.
+
+A save reads the new file back into the same Buffer, the header first, so every
+event keeps its bufnum and Tidal plays the new file at once under the same name
+and number. A file saved into a bank's folder is appended to the bank. A bank
+folder written by to bank... or export slices... is loaded, its new files only,
+as the bank named after the folder.
+
+code::
+h = SampleEditorDirtHost(~dirt);
+SampleEditor.defaultHost = h;
+SampleEditor.sample(\bd, 3);             // bd:3 of the library
+SampleEditor("~/x.wav");                 // any file; as bd:3 if the library holds it
+::
+
+Only SuperDirt's public methods are used and SuperDirt is never named, so the
+class compiles without it.
+
+An strong::owner:: does some of this itself: whatever of code::wakeOrbit::,
+code::reloadSample::, code::addSample::, code::loadSamples::,
+code::sampleAtPath:: and code::tags:: it answers is asked of it instead.
+SuperDirtGUI makes its host this way (code::~sdg.editorHost::), so its window
+hears of new banks and the editor reads and writes its tags.
+
+CLASSMETHODS::
+
+METHOD:: new
+ARGUMENT:: dirt
+the SuperDirt.
+ARGUMENT:: owner
+nil, or an object answering some of the messages above.
+
+INSTANCEMETHODS::
+
+METHOD:: dirt
+METHOD:: owner
+METHOD:: library
+The SuperDirt, the owner, and its sound library.
+
+METHOD:: orbits
+The SuperDirt's orbits, or an empty Array before code::start::.
