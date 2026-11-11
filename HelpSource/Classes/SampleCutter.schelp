@@ -1,0 +1,203 @@
+TITLE:: SampleCutter
+summary:: a sample cut on the beat grid or on its attacks, written as a bank of its own
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEditor, Classes/SampleEdit, Classes/SampleFeatures
+
+DESCRIPTION::
+The sample editor's slicer, usable on its own. The slices cover an
+link::Classes/SampleEdit::'s trim: the first starts where the trim does, the
+last ends where it ends. The cuts are on the edit's grid at a division, or on
+the attacks its analysis heard at a sensitivity, and cuts made by hand stay on
+top of either.
+
+code::
+e = SampleEdit("~/breaks.wav");
+e.analyseFeatures;                       // the onsets, and a bpm for the grid
+x = SampleCutter(e);
+x.mode = \grid; x.division = 1/16;       // every sixteenth
+x.numSlices;
+x.mode = \transients; x.sensitivity = 0.7;
+x.starts;                                // frames
+x.addSliceAt(22050);
+x.keepLevel = -18;                       // export only slices within 18 dB of the loudest
+x.keepMinMs = 40;                        // and at least 40 ms long
+x.numKept;
+x.export;                                // a new folder beside the file, handed to the host
+x.export(SampleCutter.samplesFolder +/+ "brk");   // brk/brk_00.wav ... in Dirt-Samples
+::
+
+Keep chooses which slices are exported, in either mode: those loud enough
+(link::#-keepLevel::), long enough (link::#-keepMinMs::) and short enough
+(link::#-keepMaxMs::), plus any put in by hand and minus any put out
+(link::#-toggleKeepAt::). A slice that fails is dropped, not merged: its part
+of the file is in no file, and the kept slices are numbered from 0 without
+gaps. Every rule starts open, so keep changes nothing until it is set.
+
+link::#-export:: writes every kept slice to a file of its own in a new folder
+(code::_2::, code::_3:: when the name is taken), each file named after the
+folder with the slice's index from 0, the code::n:: Tidal plays it as,
+in the file's format, with the edit's gain and DC as set and short fades
+(link::#*fadeInMs::, link::#*fadeOutMs::) so no cut clicks. The folder is
+handed to the edit's host (link::Classes/SampleEditorHost#-folderWritten::):
+a SuperDirt host loads it as a bank named after it. With a tag store, every
+slice is tagged code::slice::, and on the grid given the grid's bpm. The sample itself is never written to.
+
+It sends code::changed:: with code::\slices:: when the cuts change and
+code::\exported:: with the folder.
+
+CLASSMETHODS::
+
+METHOD:: new
+ARGUMENT:: edit
+an link::Classes/SampleEdit::; for transients mode, after its
+link::Classes/SampleEdit#-analyseFeatures::.
+
+METHOD:: divisions
+What a grid offers: code::[[fraction of a whole note, name] ...]::, a bar down to
+1/32, and triplets.
+
+METHOD:: modes
+code::[\grid, \transients]::.
+
+METHOD:: levelOff
+A link::#-keepLevel:: at or under this, -60 dB, keeps every level.
+
+METHOD:: fadeInMs
+METHOD:: fadeOutMs
+Each slice's fades, 1 and 4 ms.
+
+METHOD:: samplesFolder
+Dirt-Samples, beside the SuperDirt quark: the folder SuperDirt's own
+code::loadSoundFiles:: reads, so a bank exported there loads at every start.
+RETURNS:: its path, or nil when it is not there.
+
+METHOD:: exportParent
+Where the editor's export went last; nil at first.
+
+METHOD:: exportStart
+Where the editor's export dialog opens: link::#*exportParent::, else
+link::#*samplesFolder::, else the folder of the edit's file.
+ARGUMENT:: edit
+an link::Classes/SampleEdit::.
+
+METHOD:: freeFolder
+ARGUMENT:: parent
+ARGUMENT:: name
+RETURNS:: a path in parent that does not exist yet: the name, or the name with code::_2::, code::_3:: ...
+
+INSTANCEMETHODS::
+
+METHOD:: mode
+code::\grid:: or code::\transients::.
+
+METHOD:: division
+Of a whole note: 1/4 a beat, 1/16 a sixteenth.
+
+METHOD:: sensitivity
+0 .. 1, see link::Classes/SampleFeatures#*pickOnsets::.
+
+METHOD:: minLength
+Seconds: a cut closer than this to the one before, or to the end, is not made.
+
+METHOD:: compute
+The cuts again; every setter calls it, and the editor after the trim moves.
+RETURNS:: link::#-starts::.
+
+METHOD:: starts
+The frames the slices start on, the trim's start first.
+
+METHOD:: slices
+code::[[start, end] ...]::, frames.
+
+METHOD:: numSlices
+
+METHOD:: gridStarts
+METHOD:: transientStarts
+Where each mode cuts, between two frames.
+ARGUMENT:: f0
+ARGUMENT:: f1
+
+METHOD:: addSliceAt
+A cut by hand.
+ARGUMENT:: frame
+
+METHOD:: removeSliceNear
+Take away the cut nearest a frame, if there is one near enough; never the first.
+ARGUMENT:: frame
+ARGUMENT:: tolerance
+frames; nil for 10 ms.
+RETURNS:: true when one was taken away.
+
+METHOD:: clearEdits
+Forget the cuts made and taken away by hand, and the slices put in or out.
+
+METHOD:: keepLevel
+How far under the loudest slice a slice may be and still be kept, dB, from
+link::#*levelOff:: to 0. A slice's level is its loudest 10 ms
+(link::Classes/SampleEdit#-levelOf::), so a hit at the start of a long
+slice counts, its tail does not pull it down.
+
+METHOD:: keepMinMs
+METHOD:: keepMaxMs
+The shortest and the longest a kept slice may be, ms; 0 for no limit.
+
+METHOD:: keepIsOn
+Whether any rule is set or any slice put in or out by hand.
+
+METHOD:: kept
+Per slice, true when export writes it.
+
+METHOD:: levels
+Per slice, its level in dB under the loudest slice (0 for the loudest).
+
+METHOD:: keptSlices
+code::[[start, end] ...]:: of the kept slices, frames.
+
+METHOD:: numKept
+How many slices export writes.
+
+METHOD:: sliceIndexAt
+The slice a frame is in, or nil outside the trim.
+ARGUMENT:: frame
+a frame of the file.
+
+METHOD:: toggleKeepAt
+Put the slice a frame is in out of the export if it was in, in if it was out;
+kept so whatever the rules say, through recomputes, until link::#-clearKeep::
+or link::#-clearEdits::. cmd + click on the wave (ctrl on Windows and Linux).
+ARGUMENT:: frame
+a frame of the file.
+RETURNS:: the slice's index, or nil.
+
+METHOD:: forced
+The slices put in or out by hand: code::[[start frame, kept] ...]::.
+
+METHOD:: clearKeep
+Forget the slices put in or out by hand; the cuts stay.
+
+METHOD:: added
+METHOD:: removed
+The cuts by hand, frames.
+
+METHOD:: defaultName
+code::<file>_slices::, made a name SuperDirt takes as a bank's.
+
+METHOD:: defaultFolder
+link::#-defaultName:: beside the file, or the first free name after it.
+
+METHOD:: fileNames
+The names an export to a folder would give the kept slices: code::<folder>_00.wav::,
+code::<folder>_01.wav:: ..., two digits or more, in the file's own extension.
+ARGUMENT:: folder
+a path; only its last part counts.
+
+METHOD:: export
+ARGUMENT:: folder
+nil for link::#-defaultFolder::; a folder that exists gets a free name beside it.
+ARGUMENT:: load
+false writes the files and leaves the library alone.
+RETURNS:: code::(folder:, paths:, bank:)::, or nil.
+
+METHOD:: edit
+METHOD:: sampleRate
+The edit it cuts.
