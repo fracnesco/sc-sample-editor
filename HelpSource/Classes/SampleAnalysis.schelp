@@ -1,0 +1,74 @@
+TITLE:: SampleAnalysis
+summary:: the sample editor's numbers, in the language: peak, rms, crest, DC, BS.1770 loudness
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEdit, Classes/SampleEditor, Classes/Signal
+
+DESCRIPTION::
+Everything here runs on Signals in sclang: no server, no plugins, and exact
+on the samples the file holds. Two passes over the audio are kept, and every
+readout after that is arithmetic on them.
+
+code::
+(
+var sr = 44100, sig = Signal.newClear(sr);
+sig.size.do { |i| sig[i] = sin(2pi * 220 * i / sr) * 0.5 };
+~st = SampleAnalysis.stats([sig], 0, sig.size);
+SampleAnalysis.metrics(~st).postln;                 // peak -6.02 dBFS, rms -9.03 dBFS
+SampleAnalysis.metrics(~st, gainDb: -6).postln;     // the same with a gain, on paper
+~hops = SampleAnalysis.kHops([sig], sr);
+SampleAnalysis.loudness(~hops, sr, 0, sig.size).postln;   // (integrated:, momentaryMax: ...)
+)
+::
+
+
+CLASSMETHODS::
+
+METHOD:: stats
+Per channel over a range of frames: code::(min:, max:, sum:, sumsq:, clipped:, n:)::.
+ARGUMENT:: channels
+an Array of Signals.
+ARGUMENT:: from
+ARGUMENT:: to
+the frames, code::[from, to)::; the whole channel when code::to:: is nil.
+
+METHOD:: metrics
+What the stats come to with a gain applied and, optionally, the DC of each
+channel taken out: code::peak:: (dBFS) and code::peakAmp::, code::rms:: over
+every channel, code::crest::, code::dc:: per channel before anything is done,
+code::dcAfter::, code::overs:: (would pass full scale), code::clipped::
+(samples already at full scale in the source).
+
+METHOD:: kHops
+One FloatArray per channel: the mean square of the K-weighted signal in every
+20 ms hop, over the first link::#*maxLoudnessSeconds:: at most.
+
+METHOD:: loudness
+The loudness of a stretch from the hops: 400 ms blocks every 100 ms, gated at
+-70 LUFS and then at 10 LU under the mean, averaged; and the loudest single
+block. Channels are summed as the spec does. A stretch shorter than a block is
+measured as one block and says code::whole: true::. Answers nil when the
+stretch holds no whole hop.
+ARGUMENT:: hops
+from link::#*kHops::.
+ARGUMENT:: sampleRate
+ARGUMENT:: fromFrame
+ARGUMENT:: toFrame
+ARGUMENT:: gainDb
+applied before the gates, so the reading is of the sample as it would be saved.
+
+METHOD:: kCoefficients
+The two biquads of the K-weighting curve for a sample rate.
+
+METHOD:: gainToCeiling
+The gain, dB, that brings a peak amplitude to a ceiling.
+
+METHOD:: dbString
+A reading as a window shows it: rounded, code::-inf::, or code::-:: for nil.
+
+METHOD:: hopSeconds
+METHOD:: blockSeconds
+METHOD:: blockHopSeconds
+METHOD:: absoluteGate
+METHOD:: relativeGate
+METHOD:: maxLoudnessSeconds
+The constants of the measurement; BS.1770's by default.

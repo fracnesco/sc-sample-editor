@@ -1,0 +1,133 @@
+TITLE:: SampleFeatures
+summary:: what a sample sounds like, as numbers: envelope, onsets, tempo, key, in the language
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEdit, Classes/SampleCutter, Classes/SampleAnalysis
+
+DESCRIPTION::
+The analysis behind the tags, the editor's grid and the slicer. A file (or the
+Signals the editor holds) is mixed to mono and brought down to about 22 kHz,
+then looked at in two short-time spectra and a fine envelope. Nothing needs the
+server or a plugin.
+
+code::
+f = SampleFeatures.analyse(Platform.resourceDir +/+ "sounds/a11wlk01.wav");
+f[\bpm]; f[\bpmSure]; f[\key]; f[\keySure];
+f[\attack]; f[\length]; f[\onsets];
+SampleFeatures.pickOnsets(f[\peaks], 0.8);    // more attacks
+SampleFeatures.parseKey("fsm");               // (tonic: 6, mode: minor)
+::
+
+table::
+## strong::envelope:: || attack (10% to 90% of the peak), decay (to 20 dB under), length (to the last point within 20 dB), audible (within 40 dB), sustain (the share within 15 dB), crest, start
+## strong::spectrum:: || 1024-point frames every 256 samples: centroid, flatness and the median flatness, the share under 150 Hz and over 5 kHz, and sweep - how far the strongest bin under 400 Hz falls after the loudest frame
+## strong::onsets:: || the spectral flux of the log magnitude against the frame two back; every peak of it with its salience, how far it stands over the median of the half second around it
+## strong::tempo:: || only with four attacks and a second of sound. The autocorrelation of the flux against the frame before, scored as a comb (a beat, two, three, four) over 60 .. 200 bpm with a mild preference round 120. A bpm that fits the file's length in whole beats wins when it scores within 10%. Sure when it stands out and nothing unrelated comes close. The beat offset puts a beat where the sound starts unless a grid elsewhere lands on ten times as much
+## strong::key:: || the peaks of 4096-point spectra, 55 Hz .. 4 kHz, at their interpolated frequencies, the file's tuning taken out, folded into 12 pitch classes, matched against the Krumhansl-Kessler profiles. A one-shot mostly on one pitch class is a note, with the octave of its lowest strong partial. A sound without enough pitch has no key
+::
+
+A 30-second loop takes about half a second; a drum hit a few milliseconds.
+Called inside a Routine with link::#*breathing:: set, every long loop gives the
+rest of sclang a turn every link::#*sliceSeconds::, so a background analysis never
+holds up a pattern for longer than that.
+
+CLASSMETHODS::
+
+METHOD:: analyse
+ARGUMENT:: path
+a sound file.
+ARGUMENT:: seconds
+how much of it to read; nil for link::#*maxSeconds::.
+RETURNS:: an Event, see link::#*analyseMono::, with the file's code::sampleRate::,
+code::numChannels::, code::numFrames::, code::duration::, code::partial:: and
+code::version::; nil when it cannot be read.
+
+METHOD:: analyseChannels
+The same from one Signal per channel, as link::Classes/SampleEdit:: holds them.
+ARGUMENT:: channels
+ARGUMENT:: sampleRate
+ARGUMENT:: seconds
+nil for all of it.
+
+METHOD:: analyseMono
+ARGUMENT:: mono
+a Signal.
+ARGUMENT:: rate
+its sample rate.
+ARGUMENT:: duration
+the whole file's, for the tempo's length fit.
+RETURNS:: an Event: code::peak::, code::rms::, code::attack::, code::decay::,
+code::sustain::, code::audible::, code::length::, code::start::, code::crest::,
+code::centroid::, code::flatness::, code::flatnessMedian::, code::low::,
+code::high::, code::sweep::, code::odf:: and code::beatCurve:: (the two flux
+curves), code::hopSeconds::, code::peaks::, code::onsets:: (at sensitivity 0.5),
+code::bpm::, code::bpmConfidence::, code::bpmSure::, code::beatOffset::,
+code::lengthFit::, code::chroma::, code::tonal::, code::key::, code::tonic::,
+code::mode:: (code::\major::, code::\minor:: or code::\note::), code::octave::,
+code::keyConfidence::, code::keySure::.
+
+METHOD:: read
+METHOD:: fromChannels
+The mono signal at about link::#*targetRate::, and the file's numbers.
+
+METHOD:: envelope
+METHOD:: spectra
+METHOD:: onsetPeaks
+METHOD:: tempo
+METHOD:: beatPhase
+METHOD:: chroma
+METHOD:: key
+The stages of link::#*analyseMono::, each usable on its own.
+
+METHOD:: pickOnsets
+The onset times whose salience clears what a sensitivity asks; of two closer
+than code::minGap::, the stronger.
+ARGUMENT:: peaks
+code::[[seconds, salience] ...]::, as link::#*onsetPeaks:: answers.
+ARGUMENT:: sensitivity
+0 keeps only the strongest attacks, 1 nearly every bump.
+ARGUMENT:: minGap
+seconds.
+RETURNS:: the times, seconds.
+
+METHOD:: thresholdFor
+ARGUMENT:: sensitivity
+RETURNS:: the salience an onset needs: 0.6 at 0 down to 0.01 at 1, on a log scale.
+
+METHOD:: parseKey
+ARGUMENT:: str
+code::"Am"::, code::"F#"::, code::"Eb"::, code::"C3"::, or Tidal's spelling,
+code::"fsm"::, code::"bf"::.
+RETURNS:: code::(tonic: 0 .. 11, mode: \major, \minor or \note)::, or nil.
+
+METHOD:: correlate
+ARGUMENT:: a
+ARGUMENT:: b
+RETURNS:: their Pearson correlation.
+
+METHOD:: breathing
+METHOD:: sliceSeconds
+METHOD:: breathe
+Whether a long loop waits a millisecond every so often, inside a Routine.
+
+METHOD:: version
+A cached analysis of another version is redone.
+
+METHOD:: maxSeconds
+What link::#*analyse:: reads of a long file; 30.
+
+METHOD:: targetRate
+METHOD:: fftSize
+METHOD:: hopSize
+METHOD:: chromaSize
+METHOD:: chromaHop
+METHOD:: minBpm
+METHOD:: maxBpm
+METHOD:: fluxLag
+METHOD:: salienceFloor
+The settings. code::salienceFloor:: (150) is the least the top of an onset
+curve counts as, so a pad's drift is not read as attacks.
+
+METHOD:: majorProfile
+METHOD:: minorProfile
+METHOD:: noteNames
+The key profiles, and the names of the pitch classes.
