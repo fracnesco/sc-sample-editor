@@ -1,0 +1,318 @@
+TITLE:: SampleEditor
+summary:: a window on one sound file: trim, gain, DC, fades, numbers, bpm grid, slicer, save into SuperDirt banks
+categories:: Libraries>SampleEditor
+related:: Classes/SampleEditorHost, Classes/SampleEditorDirtHost, Classes/SampleEdit, Classes/SampleCutter
+
+DESCRIPTION::
+The waveform, one lane per channel, with the trim markers on the top strip and
+the fade handles on the bottom; boxes for the same in milliseconds; a gain knob
+with normalize to a ceiling; remove DC; a table of numbers for the file
+as it is and for what the save would write; the analysis (bpm and its grid,
+key, tags); the slicer and what it keeps; play and stop; open, reset, revert,
+save, save as, to bank.
+
+code::
+SampleEditor("~/somewhere/kick.wav");                           // plays to the hardware outputs
+SampleEditor("~/somewhere/kick.wav", SampleEditorDirtHost(~dirt));   // through SuperDirt's orbits
+SampleEditor.defaultHost = SampleEditorDirtHost(~dirt);         // for every editor from now on
+SampleEditor.sample(\bd, 3);                                    // bd:3 of the host's library
+::
+
+What the editor knows of the world is its emphasis::host::. The plain
+link::Classes/SampleEditorHost:: plays to the server's hardware outputs and
+only writes files. link::Classes/SampleEditorDirtHost:: plays through a
+SuperDirt's orbits and knows its library: a file it holds opens as
+code::bd:3::, a save is read back into the same Buffer so Tidal plays it at
+once, a bank written is loaded. SuperDirtGUI makes one that also keeps the
+files' tags, and sets it as link::#*defaultHost:: while it runs.
+
+A sound file dropped from the Finder on the window opens in an editor - in this
+window's place when nothing here was changed yet, else beside it
+(link::#-openFiles::); strong::open...:: does the same through the Finder's
+dialog. strong::to bank...:: writes the trim into a bank's folder and hands it
+to the host (link::#-addToBank::), so a file is cut into parts one selection at
+a time.
+
+Nothing is written until save. The file is read into the language
+(link::Classes/SampleEdit::), every setting sits on top of it, and the
+preview is the host's Buffer for the file (or one read for it) through a small
+synth into the output picked in the window - with a SuperDirt host, at the head
+of the orbit's group into its dry bus, so its effects and fader apply - with
+the trim, the gain, the fades and the DC applied on the way. The host wakes the
+output first: SuperDirt's monitor sleeps after four seconds of silence.
+
+strong::save:: writes over the file, in its own header and sample format, and
+keeps the original beside it as code::.bak:: the first time only; then the host
+hears of it (link::Classes/SampleEditorHost#-fileChanged::): a SuperDirt host
+reads the new file into the same Buffer, so Tidal plays it at once under the
+same name and number. strong::revert:: copies the code::.bak:: back.
+strong::save as...:: writes a new file; into the bank's own folder and it is
+appended to the bank as its last index. An integer format is clipped just under
+full scale on the way out; a float file keeps its overs.
+
+The numbers are exact, in the language: peak, rms and crest from one pass
+over the samples, the DC offset of each channel, integrated loudness and the
+loudest 400 ms window K-weighted and gated as ITU-R BS.1770 says - a stretch
+shorter than a block is read as one block and says code::(short)::. Loudness
+sums channels as the spec does: identical left and right read 3 dB above mono.
+
+Under the header is what the analysis says about the file
+(link::Classes/SampleFeatures::, and the host's tag store when it has one): the
+bpm, sure, unsure or by hand; where a beat falls; the key, or the note of a
+one-shot; the tags; and the numbers they came from. The window analyses the
+whole file when it opens, in the background (link::#-analyse::). With a bpm the
+beat grid is drawn over the wave: bars numbered in the accent colour, beats,
+and the slicer's division, each when there is room. ÷2 and ×2 halve and double
+it, to 1st hit puts a beat on the first attack (link::#-snapGridToFirstHit::),
+alt + drag on the wave slides it. With a store, a bpm, key or tags set here are
+the file's from then on, by hand; without one they last as long as the window.
+
+The slicer (link::Classes/SampleCutter::) cuts the trim on the grid at a division,
+or on the attacks at a sensitivity, and shows the cuts on the wave as they move
+- in attacks mode with the onset curve they come from. shift + click on the
+wave adds a cut, or takes away the one under the pointer. The keep row drops
+slices too quiet, too short or too long from the export, cmd + click puts one in
+or out by hand. export slices... (link::#-exportSlicesDialog::) asks where, in
+the Finder's folder dialog, and under what name, then writes every kept slice to
+a new folder of that name, each file named after it with the slice's index from
+0, and hands the folder to the host; the file itself is not written to.
+
+Keys, when the window has focus: space plays and stops, code::0:: shows the
+whole file, code::-:: and code::=:: zoom, code::f:: zooms to the trim, code::g::
+shows and hides the grid, left and right slide, cmd-s saves. In the waveform:
+cmd + two fingers up and down zooms at the pointer, two fingers on their own
+slide, a double click shows the whole file, alt + double click the trim. On Windows and Linux it is ctrl where
+it says cmd (link::#*isShortcut::), and the wheel where it says two fingers.
+
+One editor per file: opening a file that is already open fronts its
+window. The list is link::#*all::.
+
+
+CLASSMETHODS::
+
+METHOD:: new
+An editor on a file, open.
+ARGUMENT:: path
+the file.
+ARGUMENT:: host
+a link::Classes/SampleEditorHost:: or anything answering its messages; nil for link::#*defaultHost::.
+ARGUMENT:: output
+the index of the host's output the preview plays into: an orbit with a SuperDirt host.
+ARGUMENT:: bounds
+where the window goes; nil for link::#*windowBounds::.
+RETURNS:: the SampleEditor - the one already open on that file if there is one.
+
+METHOD:: sample
+An editor on the file a host's library holds as name:index.
+ARGUMENT:: name
+the bank.
+ARGUMENT:: index
+the sample in it.
+ARGUMENT:: host
+nil for link::#*defaultHost::.
+ARGUMENT:: output
+as for link::#*new::.
+
+METHOD:: defaultHost
+The host an editor gets when given none: the one set, else a plain
+link::Classes/SampleEditorHost:: on code::Server.default::. SuperDirtGUI sets
+its own here and takes it away when freed.
+
+METHOD:: makeKnob
+A knob dragged up and down, whose double click sets it back to its default
+through its action.
+ARGUMENT:: size
+pixels.
+ARGUMENT:: centered
+drawn from the middle.
+ARGUMENT:: default
+a unit value, or a function answering one; nil for no reset.
+
+METHOD:: colBg
+METHOD:: colPanel
+METHOD:: colText
+METHOD:: colDim
+METHOD:: colAccent
+METHOD:: colOn
+METHOD:: colWarn
+METHOD:: colWave
+METHOD:: colWaveDim
+METHOD:: colWaveBg
+METHOD:: colHandle
+METHOD:: colPlay
+The window's colours.
+
+METHOD:: droppedPaths
+The existing files and folders in what a drag from outside brings: one path
+as a String, several as an Array; a code::file://:: prefix is taken off.
+ARGUMENT:: data
+code::View.currentDrag::.
+RETURNS:: an link::Classes/Array:: of paths.
+
+METHOD:: isSoundFile
+Whether a path is a file with a sound file's extension (wav, aiff, flac, ogg, mp3, caf ...).
+ARGUMENT:: path
+the path.
+
+METHOD:: acceptDrops
+Make a view take drops from the Finder.
+ARGUMENT:: view
+the view.
+ARGUMENT:: action
+called with the dropped paths (link::#*droppedPaths::).
+ARGUMENT:: test
+code::{ |paths| }:: answering whether to take them; nil takes any drop holding a sound file.
+
+METHOD:: fileChooser
+A function code::{ |ok| }:: used in place of the Finder's open dialog, answering
+paths through code::ok::; nil for the dialog. Checks set it.
+
+METHOD:: bankParent
+METHOD:: lastBank
+Where link::#-addToBank:: last wrote (the folder the bank folder is in) and
+the bank's name: the next to bank... window starts there.
+
+METHOD:: all
+The open editors.
+
+METHOD:: folderChooser
+A function code::{ |start, ok| }:: used in place of the Finder's folder dialog,
+answering a folder through code::ok::; nil for the dialog. Checks set it.
+
+METHOD:: chooseFolder
+The Finder's folder dialog, or link::#*folderChooser::.
+ARGUMENT:: start
+the folder it opens at.
+ARGUMENT:: ok
+called with the folder picked, without a trailing slash, on AppClock; not called on cancel.
+
+METHOD:: windowBounds
+Where the last closed editor was; the next one opens there.
+
+METHOD:: isShortcut
+Whether a key's modifiers are the shortcut modifier: cmd on macOS, ctrl on
+Windows and Linux - which is how QtCollider reports the key there.
+ARGUMENT:: mod
+the modifiers a keyDownAction is given.
+
+METHOD:: saveKeyName
+code::"cmd-s":: on macOS, code::"ctrl-s":: elsewhere: what the hints call the
+save shortcut.
+
+METHOD:: previewDef
+METHOD:: previewDefName
+The preview SynthDef for a sample with that many channels into that many, and
+its name, code::sampleeditor_preview_<src>_<out>::.
+
+
+INSTANCEMETHODS::
+
+METHOD:: edit
+The link::Classes/SampleEdit:: behind the window.
+
+METHOD:: host
+The link::Classes/SampleEditorHost:: it was made with.
+
+METHOD:: server
+The host's server.
+
+METHOD:: outputIndex
+The output the preview plays into; the menu in the window sets it.
+
+METHOD:: play
+METHOD:: stop
+METHOD:: isPlaying
+The preview. It frees itself at the end of the trim.
+
+METHOD:: refresh
+Everything on screen from the model.
+
+METHOD:: analyse
+The features of the whole file again, in a Routine on AppClock; the grid
+takes the file's bpm as the host's store knows it, or the analysis's.
+ARGUMENT:: force
+true analyses the file in the store again too.
+
+METHOD:: info
+What the store's code::infoOf:: says about the file, or nil without a store.
+
+METHOD:: store
+The host's tag store (SuperDirtGUI's code::SDGSampleTags::), or nil.
+
+METHOD:: setBpm
+The grid's bpm, kept for the file by hand; nil takes the grid away.
+ARGUMENT:: bpm
+a number, or nil.
+
+METHOD:: setKey
+ARGUMENT:: str
+a key, code::"Am"::, code::"F#"::, code::"C3"::; empty for the analysis's.
+
+METHOD:: setTags
+ARGUMENT:: words
+the file's tags, all of them.
+
+METHOD:: snapGridToFirstHit
+A beat of the grid on the first attack of the file, to the sample
+(link::Classes/SampleEdit#-refineOnset::).
+
+METHOD:: slicing
+Whether the slicer is on, as its check box.
+
+METHOD:: slicer
+The link::Classes/SampleCutter:: while the slicer is on, else nil.
+
+METHOD:: exportSlices
+Every slice into a folder, then a bank, with a hint saying how to play it.
+ARGUMENT:: folder
+the new folder's path; nil for link::Classes/SampleCutter#-defaultFolder::, beside the file.
+RETURNS:: what link::Classes/SampleCutter#-export:: answers, or nil.
+
+METHOD:: exportSlicesDialog
+The export slices... button: link::#*chooseFolder:: at
+link::Classes/SampleCutter#*exportStart::, then a window asking for the folder's
+name, showing the files it will write; return or export writes them through
+link::#-exportSlices::, escape cancels.
+
+METHOD:: exportDialog
+While that window is open: code::(window:, folder:, export:, preview:)::, where
+code::folder:: and code::preview:: are functions answering the place and the
+text shown, and code::export.(name):: exports under a name as the button does.
+
+METHOD:: openFiles
+Open files, one editor each; the first takes this window's place when nothing
+here was changed (no trim, gain, DC, fades, cuts by hand) and it is not playing.
+What a drop on the window does. Folders and other files are left out.
+ARGUMENT:: paths
+the files.
+RETURNS:: the editors opened.
+
+METHOD:: openDialog
+The open... button: the Finder's dialog (or link::#*fileChooser::), several
+files allowed, then link::#-openFiles::.
+
+METHOD:: addToBank
+The trim into a bank's folder through link::Classes/SampleEdit#-addToBank::,
+loaded at once; remembers link::#*bankParent:: and link::#*lastBank::.
+ARGUMENT:: folder
+the bank's folder; made when new.
+RETURNS:: code::(path:, bank:, index:)::, or nil.
+
+METHOD:: addToBankDialog
+The to bank... button: a window asking for the bank's name, at
+link::#*bankParent:: (Dirt-Samples the first time), showing the file it will
+write and the code::s "bank:n":: it will play as; return or add writes through
+link::#-addToBank::, escape cancels, change... picks another place - a bank's
+own folder picks that bank.
+
+METHOD:: bankDialog
+While that window is open: code::(window:, folder:, add:, preview:, pick:)::;
+code::add.(name):: adds under a name as the button does, code::pick.(path)::
+is what change... does with the folder picked.
+
+METHOD:: window
+METHOD:: isOpen
+METHOD:: front
+METHOD:: close
+The window's state. Closing stops the preview, frees a buffer read for a file
+outside the library, and forgets the editor.
